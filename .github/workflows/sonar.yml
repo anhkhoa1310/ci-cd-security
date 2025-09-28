@@ -38,7 +38,7 @@ jobs:
           if [ -f sonar-project.properties ]; then
             COMPONENT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d= -f2)
           else
-            COMPONENT_KEY="PhuHuynh197_ProjectSCGH"
+            COMPONENT_KEY="anhkhoa1310_ci-cd-security"
           fi
 
           API_URL="https://sonarcloud.io/api/measures/component?component=${COMPONENT_KEY}&metricKeys=bugs,vulnerabilities,security_hotspots"
