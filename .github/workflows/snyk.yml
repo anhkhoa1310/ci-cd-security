@@ -1,0 +1,39 @@
+name: Snyk Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  snyk-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Snyk Multi-Project Scan
+        uses: snyk/actions/maven@master
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          command: code test
+          args: --all-projects --detection-depth=4 --sarif-file-output=snyk.sarif
+
+      - name: Count vulnerabilities from Snyk
+        run: |
+          sudo apt-get install jq -y
+          RESULTS_LENGTH=$(jq '.runs[0].results | length' snyk.sarif)
+          echo "RESULTS_LENGTH=$RESULTS_LENGTH" >> $GITHUB_ENV
+          echo "Found $RESULTS_LENGTH vulnerabilities."
+
+      - name: Fail job if vulnerabilities exist
+        run: |
+          if [ "$RESULTS_LENGTH" != 0 ]; then
+            echo " Found $RESULTS_LENGTH vulnerabilities!"
+            exit 1
+          else
+            echo " No vulnerabilities found."
+          fi
