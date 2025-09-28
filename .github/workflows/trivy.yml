@@ -1,0 +1,53 @@
+name: Trivy Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Trivy
+        run: |
+          sudo apt-get install -y wget apt-transport-https gnupg lsb-release
+          wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -y && sudo apt-get install -y trivy
+
+      - name: Trivy FileSystem Scan
+        run: trivy fs . --format json -o trivy-fs.json
+
+      - name: Build JAR with Maven
+        run: mvn package -DskipTests
+
+      - name: Build Docker image
+        run: |
+          docker build -t projectscgh:latest . || echo "Skip docker build if no Dockerfile"
+
+      - name: Trivy Docker Image Scan
+        run: |
+          if [ -f Dockerfile ]; then
+            trivy image projectscgh:latest --format json -o trivy-image.json
+          else
+            echo "No Dockerfile found, skipping image scan."
+          fi
+
+      - name: Fail job if Trivy found vulnerabilities
+        run: |
+          FS_COUNT=$(jq '[.Results[]? | select(.Vulnerabilities != null) | .Vulnerabilities[]?] | length' trivy-fs.json)
+          IMG_COUNT=0
+          if [ -f trivy-image.json ]; then
+            IMG_COUNT=$(jq '[.Results[]? | select(.Vulnerabilities != null) | .Vulnerabilities[]?] | length' trivy-image.json)
+          fi
+          TOTAL=$(($FS_COUNT + $IMG_COUNT))
+          echo "Trivy found $TOTAL vulnerabilities"
+          if [ "$TOTAL" -gt 0 ]; then
+            exit 1
+          fi
+
