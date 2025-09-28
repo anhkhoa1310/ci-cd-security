@@ -23,8 +23,8 @@ jobs:
       - name: SonarCloud Analysis
         run: |
           mvn clean verify sonar:sonar \
-            -Dsonar.projectKey=PhuHuynh197_ProjectSCGH \
-            -Dsonar.organization=phuhuynh197 \
+            -Dsonar.projectKey=anhkhoa1310_ci-cd-security \
+            -Dsonar.organization=anhkhoa1310 \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.login=${{ secrets.SONAR_TOKEN }}
         env:
