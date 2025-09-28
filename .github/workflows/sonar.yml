@@ -1,1 +1,62 @@
 
+name: SonarCloud Scan
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  sonarcloud-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: SonarCloud Analysis
+        run: |
+          mvn clean verify sonar:sonar \
+            -Dsonar.projectKey=PhuHuynh197_ProjectSCGH \
+            -Dsonar.organization=phuhuynh197 \
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.login=${{ secrets.SONAR_TOKEN }}
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+
+      - name: Fail job if SonarCloud found any issues
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        run: |
+
+          if [ -f sonar-project.properties ]; then
+            COMPONENT_KEY=$(grep "^sonar.projectKey=" sonar-project.properties | cut -d= -f2)
+          else
+            COMPONENT_KEY="PhuHuynh197_ProjectSCGH"
+          fi
+
+          API_URL="https://sonarcloud.io/api/measures/component?component=${COMPONENT_KEY}&metricKeys=bugs,vulnerabilities,security_hotspots"
+          RESPONSE=$(curl -s -u "${SONAR_TOKEN}:" "$API_URL")
+
+          echo "SonarCloud API response:"
+          echo "$RESPONSE"
+
+          BUGS=$(echo "$RESPONSE" | jq -r '.component.measures[] | select(.metric == "bugs") | .value // "0"')
+          VULNS=$(echo "$RESPONSE" | jq -r '.component.measures[] | select(.metric == "vulnerabilities") | .value // "0"')
+          HOTSPOTS=$(echo "$RESPONSE" | jq -r '.component.measures[] | select(.metric == "security_hotspots") | .value // "0"')
+
+          echo "Bugs: $BUGS"
+          echo "Vulnerabilities: $VULNS"
+          echo "Security Hotspots: $HOTSPOTS"
+
+          if [ "$BUGS" != "0" ] || [ "$VULNS" != "0" ] || [ "$HOTSPOTS" != "0" ]; then
+            echo "Found issues! Failing job."
+            exit 1
+          fi
+
