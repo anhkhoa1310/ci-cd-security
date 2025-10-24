@@ -69,16 +69,36 @@ jobs:
           echo "Trivy found $TOTAL vulnerabilities (FS: $FS_COUNT, Image: $IMG_COUNT)"
           echo "TOTAL_VULNS=$TOTAL" >> $GITHUB_ENV
 
-      # 8️⃣ Generate Markdown Security Report using script
-      - name: Generate Markdown Report (Trivy + Snyk + Sonar)
+      # 8️⃣ Generate Markdown Security Report
+      - name: Generate Markdown Security Report
         if: always()
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          echo "📁 Current directory: $(pwd)"
-          ls -R
-          chmod +x scripts/generate-security-report.sh
-          ./scripts/generate-security-report.sh
+          echo "# 🛡️ Security Scan Report" > ci-cd-security.md
+          echo "Generated on: $(date)" >> ci-cd-security.md
+          echo "" >> ci-cd-security.md
+
+          echo "## 📁 Trivy FileSystem Results" >> ci-cd-security.md
+          if [ -s trivy-fs.json ]; then
+            jq -r '.Results[]? | select(.Vulnerabilities != null) | .Vulnerabilities[]? |
+            "- [\(.Severity)] \(.VulnerabilityID): \(.Title)"' trivy-fs.json >> ci-cd-security.md
+          else
+            echo "No filesystem scan results found." >> ci-cd-security.md
+          fi
+
+          echo "" >> ci-cd-security.md
+          echo "## 🐳 Trivy Docker Image Results" >> ci-cd-security.md
+          if [ -s trivy-image.json ]; then
+            jq -r '.Results[]? | select(.Vulnerabilities != null) | .Vulnerabilities[]? |
+            "- [\(.Severity)] \(.VulnerabilityID): \(.Title)"' trivy-image.json >> ci-cd-security.md
+          else
+            echo "No image scan results found." >> ci-cd-security.md
+          fi
+
+          echo "" >> ci-cd-security.md
+          echo "### ✅ Summary" >> ci-cd-security.md
+          echo "- Total vulnerabilities found: ${TOTAL_VULNS:-0}" >> ci-cd-security.md
+          echo "" >> ci-cd-security.md
+          echo "_Report generated automatically by GitHub Actions_" >> ci-cd-security.md
 
       # 9️⃣ Upload Markdown report (only if file exists)
       - name: Upload ci-cd-security.md
