@@ -59,12 +59,12 @@ jobs:
           chmod +x generate-security-report.sh
           ./generate-security-report.sh
 
-      - name: Upload security-report.md
+      - name: Upload ci-cd-security.md
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: security-report
-          path: security-report.md
+          name: ci-cd-security
+          path: ci-cd-security.md
 
       - name: Commit security report
         if: always()
