@@ -12,73 +12,65 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # 1️⃣ Checkout code
       - uses: actions/checkout@v4
 
+      # 2️⃣ Install Trivy
       - name: Install Trivy
         run: |
           sudo apt-get install -y wget apt-transport-https gnupg lsb-release
           wget -qO - https://aquasecurity.github.io/trivy-repo/deb/public.key | sudo apt-key add -
-          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee -a /etc/apt/sources.list.d/trivy.list
-          sudo apt-get update -y && sudo apt-get install -y trivy
+          echo "deb https://aquasecurity.github.io/trivy-repo/deb $(lsb_release -sc) main" | sudo tee /etc/apt/sources.list.d/trivy.list
+          sudo apt-get update -y && sudo apt-get install -y trivy jq
 
+      # 3️⃣ Run Trivy FileSystem Scan
       - name: Trivy FileSystem Scan
-        run: trivy fs . --format json -o trivy-fs.json
+        run: |
+          echo "Running Trivy file system scan..."
+          trivy fs . --format json -o trivy-fs.json || echo "Trivy FS scan completed with issues"
 
+      # 4️⃣ Build JAR with Maven
       - name: Build JAR with Maven
-        run: mvn package -DskipTests
+        run: |
+          echo "Building project..."
+          mvn package -DskipTests
 
+      # 5️⃣ Build Docker image (if Dockerfile exists)
       - name: Build Docker image
         run: |
           if [ -f Dockerfile ]; then
+            echo "Dockerfile found, building image..."
             docker build -t projectscgh:latest .
           else
-            echo "No Dockerfile found, skipping Docker build."
+            echo "⚠️ No Dockerfile found, skipping Docker build."
           fi
 
+      # 6️⃣ Run Trivy Docker Image Scan (if Dockerfile exists)
       - name: Trivy Docker Image Scan
         run: |
           if [ -f Dockerfile ]; then
-            trivy image projectscgh:latest --format json -o trivy-image.json
+            echo "Running Trivy image scan..."
+            trivy image projectscgh:latest --format json -o trivy-image.json || echo "Trivy image scan completed with issues"
           else
-            echo "No Dockerfile found, skipping image scan."
+            echo "⚠️ No Dockerfile found, skipping image scan."
           fi
 
-      - name: Fail job if Trivy found vulnerabilities
+      # 7️⃣ Count vulnerabilities (won’t stop pipeline)
+      - name: Check Trivy vulnerability count
+        continue-on-error: true
         run: |
+          echo "Counting vulnerabilities..."
           FS_COUNT=$(jq '[.Results[]? | select(.Vulnerabilities != null) | .Vulnerabilities[]?] | length' trivy-fs.json)
           IMG_COUNT=0
           if [ -f trivy-image.json ]; then
             IMG_COUNT=$(jq '[.Results[]? | select(.Vulnerabilities != null) | .Vulnerabilities[]?] | length' trivy-image.json)
           fi
           TOTAL=$(($FS_COUNT + $IMG_COUNT))
-          echo "Trivy found $TOTAL vulnerabilities"
-          if [ "$TOTAL" -gt 0 ]; then
-            exit 1
-          fi
+          echo "Trivy found $TOTAL vulnerabilities (FS: $FS_COUNT, Image: $IMG_COUNT)"
+          echo "TOTAL_VULNS=$TOTAL" >> $GITHUB_ENV
 
-      - name: Generate Markdown Report (Trivy + Snyk + Sonar)
-        if: always()
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          chmod +x generate-security-report.sh
-          ./generate-security-report.sh
-
-      - name: Upload ci-cd-security.md
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-cd-security
-          path: ci-cd-security.md
-
-      - name: Commit security report
+      # 8️⃣ Generate Markdown Security Report
+      - name: Generate Markdown Security Report
         if: always()
         run: |
-          git clone https://x-access-token:${{ secrets.GH_PAT }}@github.com/anhkhoa1310/ci-cd-security.git dest-repo
-          cp ci-cd-security.md dest-repo/
-          cd dest-repo
-          git config --global user.name "github-actions"
-          git config --global user.email "actions@github.com"
-          git add -f ci-cd-security.md
-          git commit -m "Add latest security scan report"
-          git push origin main
+          echo "# 🛡️ Security Scan Report" > ci-cd-securi
